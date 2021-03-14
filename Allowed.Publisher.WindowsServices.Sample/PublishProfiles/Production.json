@@ -1,0 +1,7 @@
+{
+  "Host": "127.0.0.1",
+  "Username": "Administrator",
+  "Password": "qwerty1234",
+  "ServerFolder": "/C:/inetpub/ftproot/SampleService",
+  "ServiceName": "Sample Service"
+}
