@@ -1,4 +1,4 @@
-﻿using Allowed.Publisher.WindowsServices.Publish;
+﻿using Allowed.Publisher.WindowsServices.Settings;
 using Allowed.Publisher.WindowsServices.System;
 using Renci.SshNet;
 using Renci.SshNet.Sftp;
