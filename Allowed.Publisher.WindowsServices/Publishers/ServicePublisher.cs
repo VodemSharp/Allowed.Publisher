@@ -7,18 +7,25 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
-using System.Reflection;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Xml.Serialization;
 
-namespace Allowed.Publisher.WindowsServices
+namespace Allowed.Publisher.WindowsServices.Publishers
 {
-    [Cmdlet(VerbsData.Publish, "Service")]
-    public class PublishServiceCommand : Cmdlet
+    public class ServicePublisher
     {
-        [Parameter(Mandatory = true)]
-        public string Profile { get; set; }
+        private readonly string _projectName;
+        private readonly string _profile;
+
+        private string projectFile = null;
+        private string projectFolder = null;
+
+        public ServicePublisher(string projectName, string profile)
+        {
+            _projectName = projectName;
+            _profile = profile;
+        }
 
         private void UploadDirectory(SftpClient client, string localPath, string remotePath)
         {
@@ -44,7 +51,7 @@ namespace Allowed.Publisher.WindowsServices
                         if (remoteFile == null || localFile.LastWriteTimeUtc > remoteFile.LastWriteTimeUtc)
                         {
                             string processName = remoteFile == null ? "Adding" : "Updating";
-                            Console.WriteLine($"{processName} {localFile.FullName} ({(FileInfo)localFile:N0} bytes)");
+                            Console.WriteLine($"{processName} {Path.GetRelativePath(projectFolder, localFile.FullName)}");
 
                             client.UploadFile(fileStream, remotePath + "/" + localFile.Name);
                         }
@@ -53,26 +60,37 @@ namespace Allowed.Publisher.WindowsServices
             }
         }
 
-        protected override async void ProcessRecord()
+        public async Task Publish()
         {
-            // Settings
-            AssemblyName name = Assembly.GetEntryAssembly().GetName();
-            string[] temp = Path.GetDirectoryName(name.CodeBase).Split('\\');
-            temp = temp.Skip(1).Take(temp.Length - 4).ToArray();
+            Console.WriteLine("Publish started...");
 
-            string projectFolder = string.Join('\\', temp);
-            string profile = Path.IsPathRooted(Profile) ? Profile : Path.Combine(projectFolder, Profile);
-            PublishSettings settings = JsonSerializer.Deserialize<PublishSettings>(
-                await File.ReadAllTextAsync(profile));
+            foreach (string file in Directory.EnumerateFiles(Directory.GetCurrentDirectory(), "*.csproj", SearchOption.AllDirectories))
+            {
+                string fileName = Path.GetFileName(file);
+                if (fileName == $"{_projectName}.csproj")
+                {
+                    projectFile = fileName;
+                    projectFolder = Path.GetDirectoryName(file);
+                }
+            }
+
+            if (string.IsNullOrEmpty(projectFile))
+            {
+                Console.WriteLine("The project file cannot be found!");
+                return;
+            }
+
+            string profilePath = Path.IsPathRooted(_profile) ? _profile : Path.Combine(projectFolder, _profile);
+            PublishSettings settings = JsonSerializer.Deserialize<PublishSettings>(await File.ReadAllTextAsync(profilePath));
 
             XmlSerializer serializer = new(typeof(PublisherProject));
-            TextReader reader = new StringReader(await File.ReadAllTextAsync(Path.Combine(projectFolder, $"{name.Name}.csproj")));
+            TextReader reader = new StringReader(await File.ReadAllTextAsync(Path.Combine(projectFolder, projectFile)));
             PublisherProject propertyGroup = (PublisherProject)serializer.Deserialize(reader);
 
             // Publish
             Process process = new();
             process.StartInfo.FileName = "dotnet";
-            process.StartInfo.Arguments = $"publish {name.Name}.csproj -c Release";
+            process.StartInfo.Arguments = $"publish {Path.Combine(projectFolder, projectFile)} -c Release";
             process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
             process.Start();
             process.WaitForExit();
@@ -93,7 +111,7 @@ namespace Allowed.Publisher.WindowsServices
 
                 client.Disconnect();
 
-                if (command.ExitStatus != 0)
+                if (command.ExitStatus != 0 && command.ExitStatus != 1062)
                     return;
             }
 
@@ -125,7 +143,7 @@ namespace Allowed.Publisher.WindowsServices
                     return;
             }
 
-            WriteObject(settings.ServiceName);
+            Console.WriteLine("Publish Succeeded.");
         }
     }
 }
