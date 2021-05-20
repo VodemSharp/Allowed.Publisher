@@ -14,6 +14,7 @@ namespace Allowed.Publisher.WindowsServices.Sample
         // for publish service to server via ssh
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
+                .UseWindowsService()
                 .ConfigureServices((hostContext, services) =>
                 {
                     services.AddHostedService<Worker>();
