@@ -46,15 +46,15 @@ namespace Allowed.Publisher.WindowsServices.Publishers
                 {
                     SftpFile remoteFile = remoteFiles.FirstOrDefault(f => f.Name == localFile.Name);
 
-                    using (Stream fileStream = new FileStream(localFile.FullName, FileMode.Open))
+                    if (remoteFile == null || localFile.LastWriteTimeUtc > remoteFile.LastWriteTimeUtc
+                        || ((FileInfo)localFile).Length != remoteFile.Attributes.Size)
                     {
-                        if (remoteFile == null || localFile.LastWriteTimeUtc > remoteFile.LastWriteTimeUtc)
-                        {
-                            string processName = remoteFile == null ? "Adding" : "Updating";
-                            Console.WriteLine($"{processName} {Path.GetRelativePath(projectFolder, localFile.FullName)}");
+                        using Stream fileStream = new FileStream(localFile.FullName, FileMode.Open);
 
-                            client.UploadFile(fileStream, remotePath + "/" + localFile.Name);
-                        }
+                        string processName = remoteFile == null ? "Adding" : "Updating";
+                        Console.WriteLine($"{processName} {Path.GetRelativePath(projectFolder, localFile.FullName)}");
+
+                        client.UploadFile(fileStream, $"{remotePath}/{localFile.Name}");
                     }
                 }
             }
@@ -90,7 +90,8 @@ namespace Allowed.Publisher.WindowsServices.Publishers
             // Publish
             Process process = new();
             process.StartInfo.FileName = "dotnet";
-            process.StartInfo.Arguments = $"publish {Path.Combine(projectFolder, projectFile)} -c Release";
+            process.StartInfo.Arguments =
+                $"publish {Path.Combine(projectFolder, projectFile)} -c Release -f {propertyGroup.PropertyGroup.TargetFramework}";
             process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
             process.Start();
             process.WaitForExit();
